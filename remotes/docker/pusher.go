@@ -139,7 +139,7 @@ func (p dockerPusher) push(ctx context.Context, desc ocispec.Descriptor, ref str
 				p.tracker.SetStatus(ref, Status{
 					Committed: true,
 					PushStatus: PushStatus{
-						Exists: true,
+						PushStatus: PushStatusExists,
 					},
 					Status: content.Status{
 						Ref: ref,
@@ -211,6 +211,7 @@ func (p dockerPusher) push(ctx context.Context, desc ocispec.Descriptor, ref str
 			p.tracker.SetStatus(ref, Status{
 				Committed: true,
 				PushStatus: PushStatus{
+					PushStatus:  PushStatusMounted,
 					MountedFrom: mountedFrom,
 				},
 				Status: content.Status{

@@ -326,6 +326,9 @@ func Test_dockerPusher_push(t *testing.T) {
 				}
 			},
 			wantErr: nil,
+			wantStatus: &PushStatus{
+				MountedFrom: "",
+			},
 		},
 		{
 			name:             "trying to push content that already exists",
@@ -339,7 +342,7 @@ func Test_dockerPusher_push(t *testing.T) {
 			},
 			wantErr: fmt.Errorf("content %v on remote: %w", digest.FromBytes(manifestContent), errdefs.ErrAlreadyExists),
 			wantStatus: &PushStatus{
-				Exists:      true,
+				PushStatus:  PushStatusExists,
 				MountedFrom: "",
 			},
 		},
@@ -368,8 +371,8 @@ func Test_dockerPusher_push(t *testing.T) {
 			},
 			wantErr: fmt.Errorf("content %v on remote: %w", digest.FromBytes(layerContent), errdefs.ErrAlreadyExists),
 			wantStatus: &PushStatus{
+				PushStatus:  PushStatusMounted,
 				MountedFrom: "sample/always-mount",
-				Exists:      false,
 			},
 		},
 		{
@@ -397,8 +400,8 @@ func Test_dockerPusher_push(t *testing.T) {
 			},
 			wantErr: nil,
 			wantStatus: &PushStatus{
+				PushStatus:  PushStatusNotPerformed,
 				MountedFrom: "",
-				Exists:      false,
 			},
 		},
 		{
@@ -424,7 +427,6 @@ func Test_dockerPusher_push(t *testing.T) {
 			wantErr: nil,
 			wantStatus: &PushStatus{
 				MountedFrom: "",
-				Exists:      false,
 			},
 		},
 	}

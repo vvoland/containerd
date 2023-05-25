@@ -41,12 +41,23 @@ type Status struct {
 	PushStatus
 }
 
-type PushStatus struct {
-	// MountedFrom is the source content was cross-repo mounted from (empty if no cross-repo mount was performed).
-	MountedFrom string
+type PushStatusKind string
+
+var (
+	PushStatusNotPerformed PushStatusKind = ""
 
 	// Exists indicates whether content already exists in the repository and wasn't uploaded.
-	Exists bool
+	PushStatusExists PushStatusKind = "Exists"
+
+	// Cross-repo mount was performed succesfully
+	PushStatusMounted PushStatusKind = "Mounted"
+)
+
+type PushStatus struct {
+	PushStatus PushStatusKind
+
+	// MountedFrom is the source content was cross-repo mounted from (only if PushStatus == PushStatusMounted)
+	MountedFrom string
 }
 
 // StatusTracker to track status of operations
