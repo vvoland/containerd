@@ -304,7 +304,8 @@ func Test_dockerPusher_push(t *testing.T) {
 		args             args
 		checkerFunc      func(writer *pushWriter) bool
 		wantErr          error
-		wantStatus       *PushStatus
+		wantStatus       *PushStatusKind
+		mountedFrom      string
 	}{
 		{
 			name:             "when a manifest is pushed",
@@ -325,10 +326,8 @@ func Test_dockerPusher_push(t *testing.T) {
 					return false
 				}
 			},
-			wantErr: nil,
-			wantStatus: &PushStatus{
-				MountedFrom: "",
-			},
+			wantErr:     nil,
+			mountedFrom: "",
 		},
 		{
 			name:             "trying to push content that already exists",
@@ -340,11 +339,9 @@ func Test_dockerPusher_push(t *testing.T) {
 				ref:               fmt.Sprintf("manifest-%s", manifestContentDigest.String()),
 				unavailableOnFail: false,
 			},
-			wantErr: fmt.Errorf("content %v on remote: %w", digest.FromBytes(manifestContent), errdefs.ErrAlreadyExists),
-			wantStatus: &PushStatus{
-				PushStatus:  PushStatusExists,
-				MountedFrom: "",
-			},
+			wantErr:     fmt.Errorf("content %v on remote: %w", digest.FromBytes(manifestContent), errdefs.ErrAlreadyExists),
+			wantStatus:  &PushStatusExists,
+			mountedFrom: "",
 		},
 		{
 			name: "success cross-repo mount a blob layer",
@@ -369,11 +366,9 @@ func Test_dockerPusher_push(t *testing.T) {
 					return false
 				}
 			},
-			wantErr: fmt.Errorf("content %v on remote: %w", digest.FromBytes(layerContent), errdefs.ErrAlreadyExists),
-			wantStatus: &PushStatus{
-				PushStatus:  PushStatusMounted,
-				MountedFrom: "sample/always-mount",
-			},
+			wantErr:     fmt.Errorf("content %v on remote: %w", digest.FromBytes(layerContent), errdefs.ErrAlreadyExists),
+			wantStatus:  &PushStatusMounted,
+			mountedFrom: "sample/always-mount",
 		},
 		{
 			name: "failed to cross-repo mount a blob layer",
@@ -398,11 +393,9 @@ func Test_dockerPusher_push(t *testing.T) {
 					return false
 				}
 			},
-			wantErr: nil,
-			wantStatus: &PushStatus{
-				PushStatus:  PushStatusNotPerformed,
-				MountedFrom: "",
-			},
+			wantErr:     nil,
+			wantStatus:  &PushStatusNotPerformed,
+			mountedFrom: "",
 		},
 		{
 			name: "trying to push a blob layer",
@@ -424,10 +417,8 @@ func Test_dockerPusher_push(t *testing.T) {
 					return false
 				}
 			},
-			wantErr: nil,
-			wantStatus: &PushStatus{
-				MountedFrom: "",
-			},
+			wantErr:     nil,
+			mountedFrom: "",
 		},
 	}
 	for _, test := range tests {

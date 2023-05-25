@@ -38,7 +38,10 @@ type Status struct {
 	UploadUUID string
 
 	// PushStatus contains status related to push.
-	PushStatus
+	PushStatus PushStatusKind
+
+	// MountedFrom is the source content was cross-repo mounted from (only if PushStatus == PushStatusMounted)
+	MountedFrom string
 }
 
 type PushStatusKind string
@@ -51,14 +54,10 @@ var (
 
 	// Cross-repo mount was performed succesfully
 	PushStatusMounted PushStatusKind = "Mounted"
+
+	// Content was sucessfully uploaded.
+	PushStatusUploaded PushStatusKind = "Uploaded"
 )
-
-type PushStatus struct {
-	PushStatus PushStatusKind
-
-	// MountedFrom is the source content was cross-repo mounted from (only if PushStatus == PushStatusMounted)
-	MountedFrom string
-}
 
 // StatusTracker to track status of operations
 type StatusTracker interface {

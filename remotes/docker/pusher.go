@@ -137,10 +137,8 @@ func (p dockerPusher) push(ctx context.Context, desc ocispec.Descriptor, ref str
 
 			if exists {
 				p.tracker.SetStatus(ref, Status{
-					Committed: true,
-					PushStatus: PushStatus{
-						PushStatus: PushStatusExists,
-					},
+					Committed:  true,
+					PushStatus: PushStatusExists,
 					Status: content.Status{
 						Ref: ref,
 						// TODO: Set updated time?
@@ -209,11 +207,9 @@ func (p dockerPusher) push(ctx context.Context, desc ocispec.Descriptor, ref str
 		case http.StatusOK, http.StatusAccepted, http.StatusNoContent:
 		case http.StatusCreated:
 			p.tracker.SetStatus(ref, Status{
-				Committed: true,
-				PushStatus: PushStatus{
-					PushStatus:  PushStatusMounted,
-					MountedFrom: mountedFrom,
-				},
+				Committed:   true,
+				PushStatus:  PushStatusMounted,
+				MountedFrom: mountedFrom,
 				Status: content.Status{
 					Ref:    ref,
 					Total:  desc.Size,
@@ -516,6 +512,7 @@ func (pw *pushWriter) Commit(ctx context.Context, size int64, expected digest.Di
 
 	status.Committed = true
 	status.UpdatedAt = time.Now()
+	status.PushStatus = PushStatusUploaded
 	pw.tracker.SetStatus(pw.ref, status)
 
 	return nil
