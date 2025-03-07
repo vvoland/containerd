@@ -169,6 +169,13 @@ func New(address string, opts ...Opt) (*Client, error) {
 		return nil, fmt.Errorf("no grpc connection or services is available: %w", errdefs.ErrUnavailable)
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), copts.timeout)
+	defer cancel()
+
+	if ok, err := c.IsServing(ctx); err != nil || !ok {
+		return nil, fmt.Errorf("failed to reach containerd in %s: %w", copts.timeout, err)
+	}
+
 	return c, nil
 }
 
