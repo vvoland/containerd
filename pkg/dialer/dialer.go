@@ -36,6 +36,13 @@ func ContextDialer(ctx context.Context, address string) (net.Conn, error) {
 	return timeoutDialer(address, 0)
 }
 
+// WithTimeout returns a dialer that will timeout after the given duration
+func WithTimeout(timeout time.Duration) func(ctx context.Context, address string) (net.Conn, error) {
+	return func(ctx context.Context, address string) (net.Conn, error) {
+		return timeoutDialer(address, timeout)
+	}
+}
+
 func timeoutDialer(address string, timeout time.Duration) (net.Conn, error) {
 	var (
 		stopC = make(chan struct{})

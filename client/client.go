@@ -133,7 +133,7 @@ func New(address string, opts ...Opt) (*Client, error) {
 		gopts := []grpc.DialOption{
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 			grpc.WithConnectParams(connParams),
-			grpc.WithContextDialer(dialer.ContextDialer),
+			grpc.WithContextDialer(dialer.WithTimeout(copts.timeout)),
 		}
 		if len(copts.dialOptions) > 0 {
 			gopts = copts.dialOptions
