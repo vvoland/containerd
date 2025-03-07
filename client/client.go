@@ -62,6 +62,7 @@ import (
 	"github.com/containerd/containerd/v2/pkg/tracing"
 	"github.com/containerd/containerd/v2/plugins"
 	"github.com/containerd/errdefs"
+	"github.com/containerd/log"
 	"github.com/containerd/platforms"
 	"github.com/containerd/typeurl/v2"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -112,8 +113,6 @@ func New(address string, opts ...Opt) (*Client, error) {
 
 	if copts.defaultRuntime != "" {
 		c.runtime = copts.defaultRuntime
-	} else {
-		c.runtime = defaults.DefaultRuntime
 	}
 
 	if copts.defaultPlatform != nil {
@@ -170,15 +169,6 @@ func New(address string, opts ...Opt) (*Client, error) {
 		return nil, fmt.Errorf("no grpc connection or services is available: %w", errdefs.ErrUnavailable)
 	}
 
-	// check namespace labels for default runtime
-	if copts.defaultRuntime == "" && c.defaultns != "" {
-		if label, err := c.GetLabel(context.Background(), defaults.DefaultRuntimeNSLabel); err != nil {
-			return nil, err
-		} else if label != "" {
-			c.runtime = label
-		}
-	}
-
 	return c, nil
 }
 
@@ -194,22 +184,16 @@ func NewWithConn(conn *grpc.ClientConn, opts ...Opt) (*Client, error) {
 	c := &Client{
 		defaultns: copts.defaultns,
 		conn:      conn,
-		runtime:   defaults.DefaultRuntime,
+	}
+
+	if copts.defaultRuntime != "" {
+		c.runtime = copts.defaultRuntime
 	}
 
 	if copts.defaultPlatform != nil {
 		c.platform = copts.defaultPlatform
 	} else {
 		c.platform = platforms.Default()
-	}
-
-	// check namespace labels for default runtime
-	if copts.defaultRuntime == "" && c.defaultns != "" {
-		if label, err := c.GetLabel(context.Background(), defaults.DefaultRuntimeNSLabel); err != nil {
-			return nil, err
-		} else if label != "" {
-			c.runtime = label
-		}
 	}
 
 	if copts.services != nil {
@@ -224,10 +208,13 @@ type Client struct {
 	services
 	connMu    sync.Mutex
 	conn      *grpc.ClientConn
-	runtime   string
 	defaultns string
 	platform  platforms.MatchComparer
 	connector func() (*grpc.ClientConn, error)
+
+	// this should only be accessed via Runtime()
+	runtime     string
+	runtimeOnce sync.Once
 }
 
 // Reconnect re-establishes the GRPC connection to the containerd daemon
@@ -248,6 +235,25 @@ func (c *Client) Reconnect() error {
 
 // Runtime returns the name of the runtime being used
 func (c *Client) Runtime() string {
+	c.runtimeOnce.Do(func() {
+		// If runtime is already in New(), don't override it
+		if c.runtime != "" {
+			return
+		}
+
+		c.runtime = defaults.DefaultRuntime
+
+		// Check namespace labels for default runtime
+		if c.defaultns != "" {
+			ctx := context.TODO()
+			if label, err := c.GetLabel(ctx, defaults.DefaultRuntimeNSLabel); err != nil {
+				log.G(ctx).Warn("error getting default runtime label: %v", err)
+				return
+			} else if label != "" {
+				c.runtime = label
+			}
+		}
+	})
 	return c.runtime
 }
 
@@ -298,7 +304,7 @@ func (c *Client) NewContainer(ctx context.Context, id string, opts ...NewContain
 	container := containers.Container{
 		ID: id,
 		Runtime: containers.RuntimeInfo{
-			Name: c.runtime,
+			Name: c.Runtime(),
 		},
 	}
 	for _, o := range opts {
@@ -917,7 +923,7 @@ type RuntimeInfo struct {
 }
 
 func (c *Client) RuntimeInfo(ctx context.Context, runtimePath string, runtimeOptions interface{}) (*RuntimeInfo, error) {
-	rt := c.runtime
+	rt := c.Runtime()
 	if runtimePath != "" {
 		rt = runtimePath
 	}
