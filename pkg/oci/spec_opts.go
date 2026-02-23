@@ -876,9 +876,11 @@ func WithAdditionalGIDs(userstr string) SpecOpts {
 			} else {
 				username = userstr
 			}
+			// Get the user's primary GID to exclude it from supplemental groups
+			primaryGID := s.Process.User.GID
 			gids, err := getSupplementalGroupsFromFS(root, func(g user.Group) bool {
-				// we only want supplemental groups
-				if g.Name == username {
+				// Skip if this group is the user's primary group (by GID)
+				if uint32(g.Gid) == primaryGID {
 					return false
 				}
 				for _, entry := range g.List {

@@ -242,6 +242,11 @@ guest:x:405:100:guest:/dev/null:/sbin/nologin
 
 }
 
+// TestWithAdditionalGIDs tests the WithAdditionalGIDs function.
+// Note: In real usage, WithUser is called first to set s.Process.User.GID,
+// then WithAdditionalGIDs is called. This test sets up the primary GID
+// to simulate that real-world usage pattern.
+//
 //nolint:gosec
 func TestWithAdditionalGIDs(t *testing.T) {
 	t.Parallel()
@@ -266,28 +271,48 @@ sys:x:3:root,bin,adm
 	c := containers.Container{ID: t.Name()}
 
 	testCases := []struct {
-		user     string
-		expected []uint32
+		user       string
+		primaryGID uint32 // The user's primary GID (as would be set by WithUser)
+		expected   []uint32
 	}{
 		{
-			user:     "root",
-			expected: []uint32{0, 1, 2, 3},
+			// root (UID=0) has primary GID=0
+			// root is listed in groups: root(0), bin(1), daemon(2), sys(3)
+			// Primary group (0) is excluded from supplemental, but added back by ensureAdditionalGids
+			user:       "root",
+			primaryGID: 0,
+			expected:   []uint32{0, 1, 2, 3},
 		},
 		{
-			user:     "1000",
-			expected: []uint32{0},
+			// User 1000 doesn't exist in passwd, returns early
+			// ensureAdditionalGids adds the primary GID (0)
+			user:       "1000",
+			primaryGID: 0,
+			expected:   []uint32{0},
 		},
 		{
-			user:     "bin",
-			expected: []uint32{0, 2, 3},
+			// bin (UID=1) has primary GID=1
+			// bin is listed in groups: bin(1), daemon(2), sys(3)
+			// Primary group (1) is excluded from supplemental, but added back by ensureAdditionalGids
+			user:       "bin",
+			primaryGID: 1,
+			expected:   []uint32{1, 2, 3},
 		},
 		{
-			user:     "bin:root",
-			expected: []uint32{0},
+			// "bin:root" is treated as a username (not user:group parsing in WithAdditionalGIDs)
+			// No user named "bin:root" exists in passwd
+			// ensureAdditionalGids adds the primary GID (0)
+			user:       "bin:root",
+			primaryGID: 0,
+			expected:   []uint32{0},
 		},
 		{
-			user:     "daemon",
-			expected: []uint32{0, 1},
+			// daemon (UID=2) has primary GID=2
+			// daemon is listed in groups: bin(1), daemon(2)
+			// Primary group (2) is excluded from supplemental, but added back by ensureAdditionalGids
+			user:       "daemon",
+			primaryGID: 2,
+			expected:   []uint32{2, 1},
 		},
 	}
 	for _, testCase := range testCases {
@@ -298,12 +323,70 @@ sys:x:3:root,bin,adm
 				Root: &specs.Root{
 					Path: td,
 				},
+				Linux: &specs.Linux{},
+				Process: &specs.Process{
+					User: specs.User{
+						GID: testCase.primaryGID,
+					},
+				},
 			}
 			err := WithAdditionalGIDs(testCase.user)(context.Background(), nil, &c, &s)
 			assert.NoError(t, err)
 			assert.Equal(t, testCase.expected, s.Process.User.AdditionalGids)
 		})
 	}
+}
+
+// TestWithAdditionalGIDsUserWithSameNameGroup tests the scenario from
+// https://github.com/containerd/containerd/issues/11937 where a user
+// has a group with the same name that is NOT their primary group.
+//
+//nolint:gosec
+func TestWithAdditionalGIDsUserWithSameNameGroup(t *testing.T) {
+	t.Parallel()
+	// Simulate MongoDB scenario:
+	// - User mongodb has UID=101 and primary GID=65534 (nogroup)
+	// - Group mongodb has GID=101 and mongodb is a member
+	// The user should get both their primary GID (65534) and the mongodb group (101)
+	expectedPasswd := `root:x:0:0:root:/root:/bin/ash
+mongodb:x:101:65534::/home/mongodb:/usr/sbin/nologin
+`
+	expectedGroup := `root:x:0:root
+nogroup:x:65534:
+mongodb:x:101:mongodb
+`
+	td := t.TempDir()
+	apply := fstest.Apply(
+		fstest.CreateDir("/etc", 0777),
+		fstest.CreateFile("/etc/passwd", []byte(expectedPasswd), 0777),
+		fstest.CreateFile("/etc/group", []byte(expectedGroup), 0777),
+	)
+	if err := apply.Apply(td); err != nil {
+		t.Fatalf("failed to apply: %v", err)
+	}
+	c := containers.Container{ID: t.Name()}
+
+	// Test that the mongodb user gets the mongodb group (101) as a supplemental group
+	// even though the group name matches the username. This is because the user's
+	// primary GID (65534) is different from the mongodb group GID (101).
+	s := Spec{
+		Version: specs.Version,
+		Root: &specs.Root{
+			Path: td,
+		},
+		Linux: &specs.Linux{},
+		Process: &specs.Process{
+			User: specs.User{
+				UID: 101,
+				GID: 65534, // primary group is nogroup, not mongodb
+			},
+		},
+	}
+	err := WithAdditionalGIDs("mongodb")(context.Background(), nil, &c, &s)
+	assert.NoError(t, err)
+	// Should include: primary GID (65534) prepended by ensureAdditionalGids,
+	// and mongodb group (101) as a supplemental group
+	assert.Equal(t, []uint32{65534, 101}, s.Process.User.AdditionalGids)
 }
 
 // withAllKnownCaps sets all known capabilities.
